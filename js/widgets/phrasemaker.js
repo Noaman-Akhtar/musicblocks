@@ -362,6 +362,43 @@ class PhraseMaker {
     }
 
     /**
+     * Gets the saved matrix selections for a Phrase Maker block.
+     * @param {number} blockNo - The Phrase Maker block identifier.
+     * @returns {object|null} Serialized widget state.
+     */
+    getWidgetStateForBlock(blockNo) {
+        if (blockNo === null || blockNo === undefined) {
+            return null;
+        }
+
+        const blockMap = this._blockMap[blockNo];
+        if (!Array.isArray(blockMap)) {
+            return null;
+        }
+
+        return {
+            blockMap: JSON.parse(JSON.stringify(blockMap))
+        };
+    }
+
+    /**
+     * Restores saved matrix selections for a Phrase Maker block.
+     * @param {number} blockNo - The Phrase Maker block identifier.
+     * @param {object|Array} state - Serialized widget state.
+     * @returns {void}
+     */
+    setWidgetStateForBlock(blockNo, state) {
+        if (blockNo === null || blockNo === undefined) {
+            return;
+        }
+
+        const blockMap = Array.isArray(state) ? state : state?.blockMap;
+        if (Array.isArray(blockMap)) {
+            this._blockMap[blockNo] = JSON.parse(JSON.stringify(blockMap));
+        }
+    }
+
+    /**
      * Provides access to the save lock mechanism.
      * This method debounces the save button action.
      * @private
@@ -4175,8 +4212,9 @@ class PhraseMaker {
         } else {
             // Otherwise, we need to look at the blockMap.
             blk = this.blockNo;
-            for (let i = 0; i < this._blockMap[blk].length; i++) {
-                obj = this._blockMap[blk][i];
+            const blockMap = this._blockMap[blk] || [];
+            for (let i = 0; i < blockMap.length; i++) {
+                obj = blockMap[i];
                 if (obj[0] !== -1) {
                     n = obj[2];
                     c = 0;

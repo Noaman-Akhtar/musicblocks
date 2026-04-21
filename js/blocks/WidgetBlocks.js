@@ -1401,12 +1401,18 @@ function setupWidgetBlocks(activity) {
 
             logo.rhythmRuler.Rulers = [];
             logo.rhythmRuler.Drums = [];
+            logo.rhythmRuler.blockNo = blk;
             logo.inRhythmRuler = true;
 
             const listenerName = "_rhythmruler_" + turtle;
             logo.setDispatchBlock(blk, turtle, listenerName);
 
             const __listener = () => {
+                const widgetState = activity.blocks.blockList[blk]?.widgetState;
+                if (widgetState !== undefined) {
+                    logo.rhythmRuler.setWidgetState(widgetState);
+                }
+
                 logo.rhythmRuler.init(activity);
             };
 
@@ -1680,6 +1686,11 @@ function setupWidgetBlocks(activity) {
                     // Process queued up rhythms.
                     logo.phraseMaker.blockNo = blk;
                     logo.phraseMaker.sorted = false;
+                    const widgetState = activity.blocks.blockList[blk]?.widgetState;
+                    if (widgetState !== undefined) {
+                        logo.phraseMaker.setWidgetStateForBlock(blk, widgetState);
+                    }
+
                     logo.phraseMaker.init(activity, turtle);
 
                     for (let i = 0; i < logo.tupletRhythms.length; i++) {

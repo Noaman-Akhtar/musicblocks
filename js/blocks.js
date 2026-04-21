@@ -6136,6 +6136,83 @@ class Blocks {
                     this.customTemperamentDefined = true;
                 }
 
+                const mapLoadedWidgetBlockId = blockId => {
+                    if (
+                        blockId === null ||
+                        blockId === undefined ||
+                        blockId === -1 ||
+                        typeof blockId !== "number"
+                    ) {
+                        return blockId;
+                    }
+
+                    const repeatOffset =
+                        blockId >= 1000000 ? Math.floor(blockId / 1000000) * 1000000 : 0;
+                    const baseId = repeatOffset > 0 ? blockId % 1000000 : blockId;
+                    return repeatOffset + baseId + blockOffset;
+                };
+
+                const remapLoadedPhraseMakerState = state => {
+                    const blockMapState = Array.isArray(state?.blockMap) ? state.blockMap : [];
+
+                    return {
+                        blockMap: blockMapState
+                            .filter(entry => Array.isArray(entry) && Array.isArray(entry[1]))
+                            .map(entry => [
+                                mapLoadedWidgetBlockId(entry[0]),
+                                [mapLoadedWidgetBlockId(entry[1][0]), entry[1][1]],
+                                entry[2]
+                            ])
+                    };
+                };
+
+                const remapLoadedRhythmRulerState = state => {
+                    if (state === null || typeof state !== "object") {
+                        return null;
+                    }
+
+                    return {
+                        drums: Array.isArray(state.drums)
+                            ? state.drums.map(drum => mapLoadedWidgetBlockId(drum))
+                            : [],
+                        rulers: Array.isArray(state.rulers)
+                            ? JSON.parse(JSON.stringify(state.rulers))
+                            : [],
+                        dissectHistory: Array.isArray(state.dissectHistory)
+                            ? state.dissectHistory.map(entry => {
+                                  if (!Array.isArray(entry)) {
+                                      return entry;
+                                  }
+
+                                  return [
+                                      JSON.parse(JSON.stringify(entry[0])),
+                                      mapLoadedWidgetBlockId(entry[1])
+                                  ];
+                              })
+                            : [],
+                        circularView: state.circularView === true
+                    };
+                };
+
+                const setLoadedWidgetState = args => {
+                    const thisBlock = args[0];
+                    const widgetName = args[1];
+                    const widgetArgs = args[2];
+                    if (widgetArgs?.widgetState === undefined) {
+                        return;
+                    }
+
+                    if (widgetName === "matrix") {
+                        that.blockList[thisBlock].widgetState = remapLoadedPhraseMakerState(
+                            widgetArgs.widgetState
+                        );
+                    } else {
+                        that.blockList[thisBlock].widgetState = remapLoadedRhythmRulerState(
+                            widgetArgs.widgetState
+                        );
+                    }
+                };
+
                 let postProcess;
                 /** A few special cases. */
                 switch (name) {
@@ -6780,6 +6857,17 @@ class Blocks {
                             blkData[4],
                             postProcess,
                             [thisBlock, value]
+                        );
+                        break;
+                    case "matrix":
+                    case "rhythmruler2":
+                    case "rhythmruler3":
+                        this._makeNewBlockWithConnections(
+                            name,
+                            blockOffset,
+                            blkData[4],
+                            setLoadedWidgetState,
+                            [thisBlock, name, blkInfo[1]]
                         );
                         break;
                     default:

@@ -239,6 +239,47 @@ describe("RhythmRuler Widget", () => {
             expect(rhythmRuler._startingTime).toBeNull();
             expect(rhythmRuler._tapTimes).toEqual([]);
         });
+
+        test("should serialize Rhythm Maker state", () => {
+            rhythmRuler.Drums = [12, null];
+            rhythmRuler.Rulers = [
+                [[4, 4], [[0, 2]]],
+                [[1], []]
+            ];
+            rhythmRuler._dissectHistory = [[[[0, 2]], 12]];
+            rhythmRuler._circularView = true;
+
+            const state = rhythmRuler.getWidgetState();
+
+            expect(state).toEqual({
+                drums: [12, null],
+                rulers: [
+                    [[4, 4], [[0, 2]]],
+                    [[1], []]
+                ],
+                dissectHistory: [[[[0, 2]], 12]],
+                circularView: true
+            });
+            state.drums[0] = 99;
+            expect(rhythmRuler.Drums).toEqual([12, null]);
+        });
+
+        test("should restore Rhythm Maker state", () => {
+            const state = {
+                drums: [12],
+                rulers: [[[4, 4], [[0, 2]]]],
+                dissectHistory: [[[[0, 2]], 12]],
+                circularView: true
+            };
+
+            rhythmRuler.setWidgetState(state);
+            state.drums[0] = 99;
+
+            expect(rhythmRuler.Drums).toEqual([12]);
+            expect(rhythmRuler.Rulers).toEqual([[[4, 4], [[0, 2]]]]);
+            expect(rhythmRuler._dissectHistory).toEqual([[[[0, 2]], 12]]);
+            expect(rhythmRuler._circularView).toBe(true);
+        });
     });
 
     // =========================================================================

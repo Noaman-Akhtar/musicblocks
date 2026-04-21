@@ -370,6 +370,31 @@ describe("PhraseMaker Widget", () => {
             phraseMaker._matrixHasTuplets = true;
             expect(phraseMaker._matrixHasTuplets).toBe(true);
         });
+
+        test("should serialize Phrase Maker block selections", () => {
+            phraseMaker._blockMap[12] = [[4, [8, 0], 1]];
+
+            const state = phraseMaker.getWidgetStateForBlock(12);
+
+            expect(state).toEqual({ blockMap: [[4, [8, 0], 1]] });
+            state.blockMap[0][0] = 99;
+            expect(phraseMaker._blockMap[12]).toEqual([[4, [8, 0], 1]]);
+        });
+
+        test("should preserve an empty Phrase Maker selection state", () => {
+            phraseMaker._blockMap[12] = [];
+
+            expect(phraseMaker.getWidgetStateForBlock(12)).toEqual({ blockMap: [] });
+        });
+
+        test("should restore Phrase Maker block selections", () => {
+            const state = { blockMap: [[4, [8, 0], 1]] };
+
+            phraseMaker.setWidgetStateForBlock(12, state);
+            state.blockMap[0][0] = 99;
+
+            expect(phraseMaker._blockMap[12]).toEqual([[4, [8, 0], 1]]);
+        });
     });
 
     describe("effects parameters", () => {

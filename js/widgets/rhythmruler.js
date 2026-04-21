@@ -318,6 +318,48 @@ class RhythmRuler {
     }
 
     /**
+     * Gets the Rhythm Maker state that should be saved with the widget block.
+     * @returns {object} Serialized widget state.
+     */
+    getWidgetState() {
+        if (this._dissectNumber?.classList !== undefined) {
+            this.saveDissectHistory();
+        }
+
+        return {
+            drums: JSON.parse(JSON.stringify(this.Drums)),
+            rulers: JSON.parse(JSON.stringify(this.Rulers)),
+            dissectHistory: JSON.parse(JSON.stringify(this._dissectHistory)),
+            circularView: this._circularView
+        };
+    }
+
+    /**
+     * Restores Rhythm Maker state saved with the widget block.
+     * @param {object} state - Serialized widget state.
+     * @returns {void}
+     */
+    setWidgetState(state) {
+        if (state === null || typeof state !== "object") {
+            return;
+        }
+
+        if (Array.isArray(state.drums)) {
+            this.Drums = JSON.parse(JSON.stringify(state.drums));
+        }
+
+        if (Array.isArray(state.rulers)) {
+            this.Rulers = JSON.parse(JSON.stringify(state.rulers));
+        }
+
+        if (Array.isArray(state.dissectHistory)) {
+            this._dissectHistory = JSON.parse(JSON.stringify(state.dissectHistory));
+        }
+
+        this._circularView = state.circularView === true;
+    }
+
+    /**
      * Initializes the temperament widget.
      * @param {Activity} activity The activity instance associated with the widget.
      * @returns {void}

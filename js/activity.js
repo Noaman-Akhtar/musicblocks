@@ -6667,6 +6667,96 @@ class Activity {
                 blockMap.push(blk);
             }
 
+            const mapWidgetBlockId = blockId => {
+                if (
+                    blockId === null ||
+                    blockId === undefined ||
+                    blockId === -1 ||
+                    typeof blockId !== "number"
+                ) {
+                    return blockId;
+                }
+
+                const repeatOffset =
+                    blockId >= 1000000 ? Math.floor(blockId / 1000000) * 1000000 : 0;
+                const baseId = repeatOffset > 0 ? blockId % 1000000 : blockId;
+                const mappedId = blockIndexById.get(baseId);
+                return mappedId === undefined ? null : repeatOffset + mappedId;
+            };
+
+            const remapPhraseMakerState = state => {
+                const blockMapState = Array.isArray(state?.blockMap) ? state.blockMap : [];
+                const blockMapForExport = [];
+
+                for (let i = 0; i < blockMapState.length; i++) {
+                    const entry = blockMapState[i];
+                    if (!Array.isArray(entry) || !Array.isArray(entry[1])) {
+                        continue;
+                    }
+
+                    const rowBlock = mapWidgetBlockId(entry[0]);
+                    const rhythmBlock = mapWidgetBlockId(entry[1][0]);
+                    if ((entry[0] !== -1 && rowBlock === null) || rhythmBlock === null) {
+                        continue;
+                    }
+
+                    blockMapForExport.push([rowBlock, [rhythmBlock, entry[1][1]], entry[2]]);
+                }
+
+                return blockMapForExport.length === 0 ? null : { blockMap: blockMapForExport };
+            };
+
+            const remapRhythmRulerState = state => {
+                if (state === null || typeof state !== "object") {
+                    return null;
+                }
+
+                const stateForExport = {
+                    drums: Array.isArray(state.drums)
+                        ? state.drums.map(drum => mapWidgetBlockId(drum))
+                        : [],
+                    rulers: Array.isArray(state.rulers)
+                        ? JSON.parse(JSON.stringify(state.rulers))
+                        : [],
+                    dissectHistory: Array.isArray(state.dissectHistory)
+                        ? state.dissectHistory.map(entry => {
+                              if (!Array.isArray(entry)) {
+                                  return entry;
+                              }
+
+                              return [
+                                  JSON.parse(JSON.stringify(entry[0])),
+                                  mapWidgetBlockId(entry[1])
+                              ];
+                          })
+                        : [],
+                    circularView: state.circularView === true
+                };
+
+                return stateForExport.drums.length === 0 && stateForExport.rulers.length === 0
+                    ? null
+                    : stateForExport;
+            };
+
+            const getWidgetStateForExport = (myBlock, blk) => {
+                switch (myBlock.name) {
+                    case "matrix":
+                        return remapPhraseMakerState(
+                            this.logo?.phraseMaker?.getWidgetStateForBlock?.(blk) ||
+                                myBlock.widgetState
+                        );
+                    case "rhythmruler2":
+                    case "rhythmruler3":
+                        if (this.logo?.rhythmRuler?.blockNo === blk) {
+                            return remapRhythmRulerState(this.logo.rhythmRuler.getWidgetState());
+                        }
+
+                        return remapRhythmRulerState(myBlock.widgetState);
+                    default:
+                        return null;
+                }
+            };
+
             const data = [];
             for (let blk = 0; blk < this.blocks.blockList.length; blk++) {
                 const myBlock = this.blocks.blockList[blk];
@@ -6756,6 +6846,8 @@ class Activity {
                         case "matrix":
                         case "pitchdrummatrix":
                         case "rhythmruler":
+                        case "rhythmruler2":
+                        case "rhythmruler3":
                         case "timbre":
                         case "pitchstaircase":
                         case "tempo":
@@ -6767,6 +6859,11 @@ class Activity {
                             args = {
                                 collapsed: myBlock.collapsed
                             };
+                            // eslint-disable-next-line no-case-declarations
+                            const widgetState = getWidgetStateForExport(myBlock, blk);
+                            if (widgetState !== null) {
+                                args.widgetState = widgetState;
+                            }
                             break;
                         case "storein2":
                         case "nameddo":
