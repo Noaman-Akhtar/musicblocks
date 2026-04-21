@@ -26,6 +26,7 @@ class GlobalCard {
         this.ProjectData = null;
         this.id = null;
         this.likeTimeout = null;
+        this.likePending = false;
         this.clipboard = null;
         this.PlaceholderMBImage = "images/mbgraphic.png";
         this.PlaceholderTBImage = "images/tbgraphic.png";
@@ -261,21 +262,26 @@ class GlobalCard {
     }
 
     like() {
+        if (this.likePending) return;
         const Planet = this.Planet;
         clearTimeout(this.likeTimeout);
         let like = true;
         if (Planet.ProjectStorage.isLiked(this.id)) like = false;
+        this.likePending = true;
         this.likeTimeout = setTimeout(() => {
             Planet.ServerInterface.likeProject(this.id, like, data => {
+                this.likePending = false;
                 this.afterLike(data, like);
             });
         }, 500);
     }
 
     afterLike(data, like) {
-        !data.success && data.error === "ERROR_ACTION_NOT_PERMITTED"
-            ? this.setLike(like)
-            : this.setLike(like);
+        if (data.success) {
+            this.setLike(like);
+        } else if (data.error === "ERROR_ACTION_NOT_PERMITTED") {
+            this.setLike(like);
+        }
     }
 
     setLike(like) {
