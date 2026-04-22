@@ -277,9 +277,11 @@ class GlobalCard {
     }
 
     afterLike(data, like) {
-        !data.success && data.error === "ERROR_ACTION_NOT_PERMITTED"
-            ? this.setLike(like)
-            : this.setLike(like);
+        if (data.success) {
+            this.setLike(like);
+        } else if (data.error === "ERROR_ACTION_NOT_PERMITTED") {
+            this.setLike(like);
+        }
     }
 
     setLike(like) {
