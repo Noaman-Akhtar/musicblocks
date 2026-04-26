@@ -17,7 +17,7 @@
 
    platformColor, _, docById, getNote, getDrumName, getDrumIcon,
    getDrumSynthName, Singer, MATRIXSOLFEHEIGHT, MATRIXSOLFEWIDTH,
-   SOLFEGECONVERSIONTABLE, normalizeNoteAccidentals
+   SOLFEGECONVERSIONTABLE, normalizeNoteAccidentals, ManagedTimer
 */
 /*
    Global locations
@@ -26,6 +26,8 @@
         MATRIXSOLFEHEIGHT, MATRIXSOLFEWIDTH, SOLFEGECONVERSIONTABLE
    js/utils/utils.js
         _, docById
+   js/utils/ManagedTimer.js
+        ManagedTimer
     js/utils/platformstyle.js
         platformColor
 */
@@ -103,6 +105,109 @@ class PitchDrumMatrix {
         // We populate the blockMap whenever a node is selected and
         // restore any nodes that might be present.
         this._blockMap = [];
+
+        this._timerManager = typeof ManagedTimer !== "undefined" ? new ManagedTimer() : null;
+        this._playbackTimerManager =
+            typeof ManagedTimer !== "undefined" ? new ManagedTimer() : null;
+        this._activeTimeouts = new Set();
+        this._activePlaybackTimeouts = new Set();
+    }
+
+    /**
+     * Schedules a timeout through the provided timer owner.
+     *
+     * @private
+     * @param {ManagedTimer|null} timerManager - Managed timer instance.
+     * @param {Set<number>} activeTimeouts - Fallback timeout IDs.
+     * @param {Function} callback - Callback to run after the delay.
+     * @param {number} delay - Delay in milliseconds.
+     * @returns {number} Timer ID.
+     */
+    _setManagedTimeout(timerManager, activeTimeouts, callback, delay) {
+        if (timerManager !== null) {
+            return timerManager.setTimeout(callback, delay);
+        }
+
+        let id;
+        id = setTimeout(() => {
+            activeTimeouts.delete(id);
+            callback();
+        }, delay);
+        activeTimeouts.add(id);
+        return id;
+    }
+
+    /**
+     * Clears timers owned by the provided timer owner.
+     *
+     * @private
+     * @param {ManagedTimer|null} timerManager - Managed timer instance.
+     * @param {Set<number>} activeTimeouts - Fallback timeout IDs.
+     * @returns {number} Number of tracked timers cleared.
+     */
+    _clearManagedTimers(timerManager, activeTimeouts) {
+        let count = 0;
+
+        if (timerManager !== null) {
+            count += timerManager.clearAll();
+        }
+
+        for (const id of activeTimeouts) {
+            clearTimeout(id);
+            count++;
+        }
+        activeTimeouts.clear();
+
+        return count;
+    }
+
+    /**
+     * Schedules a timeout owned by the widget lifecycle.
+     *
+     * @private
+     * @param {Function} callback - Callback to run after the delay.
+     * @param {number} delay - Delay in milliseconds.
+     * @returns {number} Timer ID.
+     */
+    _setWidgetTimeout(callback, delay) {
+        return this._setManagedTimeout(this._timerManager, this._activeTimeouts, callback, delay);
+    }
+
+    /**
+     * Schedules a timeout owned by the playback lifecycle.
+     *
+     * @private
+     * @param {Function} callback - Callback to run after the delay.
+     * @param {number} delay - Delay in milliseconds.
+     * @returns {number} Timer ID.
+     */
+    _setPlaybackTimeout(callback, delay) {
+        return this._setManagedTimeout(
+            this._playbackTimerManager,
+            this._activePlaybackTimeouts,
+            callback,
+            delay
+        );
+    }
+
+    /**
+     * Clears all widget-lifecycle timers.
+     *
+     * @private
+     * @returns {number} Number of tracked timers cleared.
+     */
+    _clearWidgetTimers() {
+        return this._clearManagedTimers(this._timerManager, this._activeTimeouts);
+    }
+
+    /**
+     * Clears all playback-lifecycle timers.
+     *
+     * @private
+     * @returns {number} Number of tracked timers cleared.
+     */
+    _clearPlaybackTimers() {
+        return this._clearManagedTimers(this._playbackTimerManager, this._activePlaybackTimeouts);
     }
 
     /**
@@ -166,7 +271,7 @@ class PitchDrumMatrix {
                 if (!this._get_save_lock()) {
                     this._save_lock = true;
                     this._save();
-                    setTimeout(() => {
+                    this._setWidgetTimeout(() => {
                         this._save_lock = false;
                     }, 1000);
                 }
@@ -197,11 +302,15 @@ class PitchDrumMatrix {
         // For the button callbacks
         widgetWindow.onclose = () => {
             pdmTableDiv.style.visibility = "hidden";
+            this._playing = false;
+            this.activity.logo.synth.stop();
+            this._clearPlaybackTimers();
+            this._clearWidgetTimers();
             this.activity.hideMsgs();
             widgetWindow.destroy();
         };
 
-        this.widgetWindow.onmaximize = this._scale;
+        this.widgetWindow.onmaximize = () => this._scale();
 
         // We use an outer div to scroll vertically and an inner div to scroll horizontally.
         const outerDivTmp = document.createElement("div");
@@ -648,10 +757,11 @@ class PitchDrumMatrix {
      * @returns {void}
      */
     _scale() {
+        const widgetWindow = this.widgetWindow;
         const windowHeight =
-            this.getWidgetFrame().offsetHeight - this.getDragElement().offsetHeight;
-        const widgetBody = this.getWidgetBody();
-        const scale = this.isMaximized() ? windowHeight / widgetBody.offsetHeight : 1;
+            widgetWindow.getWidgetFrame().offsetHeight - widgetWindow.getDragElement().offsetHeight;
+        const widgetBody = widgetWindow.getWidgetBody();
+        const scale = widgetWindow.isMaximized() ? windowHeight / widgetBody.offsetHeight : 1;
         widgetBody.style.display = "flex";
         widgetBody.style.flexDirection = "column";
         widgetBody.style.alignItems = "center";
@@ -659,11 +769,11 @@ class PitchDrumMatrix {
         widgetBody.children[0].style.flexDirection = "column";
         widgetBody.children[0].style.alignItems = "center";
 
-        const svg = this.getWidgetBody().getElementsByTagName("svg")[0];
+        const svg = widgetWindow.getWidgetBody().getElementsByTagName("svg")[0];
         svg.style.pointerEvents = "none";
         svg.setAttribute("height", `${400 * scale}px`);
         svg.setAttribute("width", `${400 * scale}px`);
-        setTimeout(() => {
+        this._setWidgetTimeout(() => {
             svg.style.pointerEvents = "auto";
         }, 100);
     }
@@ -690,6 +800,8 @@ class PitchDrumMatrix {
             icon.appendChild(img);
             icon.appendChild(document.createTextNode("\u00A0\u00A0"));
         } else {
+            this._clearPlaybackTimers();
+            this.activity.logo.synth.stop();
             icon.textContent = "\u00A0\u00A0";
             const img = document.createElement("img");
             img.src = "header-icons/play-button.svg";
@@ -741,7 +853,7 @@ class PitchDrumMatrix {
             if (ii < pairs.length) {
                 this._playPitchDrum(ii, pairs);
             }
-            setTimeout(() => {
+            this._setPlaybackTimeout(() => {
                 this._playing = false;
                 icon.textContent = "\u00A0\u00A0";
                 const img = document.createElement("img");
@@ -819,12 +931,12 @@ class PitchDrumMatrix {
         }
 
         if (i < pairs.length - 1) {
-            setTimeout(() => {
+            this._setPlaybackTimeout(() => {
                 const ii = i + 1;
                 this._playPitchDrum(ii, pairs);
             }, 1000);
         } else {
-            setTimeout(() => {
+            this._setPlaybackTimeout(() => {
                 for (let ii = 0; ii < pdmTable.rows.length - 1; ii++) {
                     pdmTable.rows[ii].cells[0].style.backgroundColor = platformColor.labelColor;
                 }
@@ -939,7 +1051,10 @@ class PitchDrumMatrix {
                 null
             );
 
-            setTimeout(() => {
+            const setPreviewTimeout = this._playing
+                ? this._setPlaybackTimeout.bind(this)
+                : this._setWidgetTimeout.bind(this);
+            setPreviewTimeout(() => {
                 this.activity.logo.synth.trigger(0, "C2", 0.125, drumName, null, null);
             }, waitTime);
         }

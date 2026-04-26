@@ -21,6 +21,7 @@
  */
 
 const PitchDrumMatrix = require("../pitchdrummatrix.js");
+const ManagedTimer = require("../../utils/ManagedTimer.js");
 
 // --- Global Mocks ---
 global._ = msg => msg;
@@ -50,10 +51,15 @@ global.getNote = jest.fn(() => ["C", "", 4]);
 global.getDrumName = jest.fn(() => null);
 global.getDrumIcon = jest.fn(() => "icon.svg");
 global.getDrumSynthName = jest.fn(() => "kick");
+global.normalizeNoteAccidentals = note => note;
 global.MATRIXSOLFEHEIGHT = 30;
 global.MATRIXSOLFEWIDTH = 80;
 global.SOLFEGECONVERSIONTABLE = {};
-global.Singer = { RhythmActions: { getNoteValue: jest.fn(() => 0.25) } };
+global.Singer = {
+    defaultBPMFactor: 0.5,
+    RhythmActions: { getNoteValue: jest.fn(() => 0.25) }
+};
+global.ManagedTimer = ManagedTimer;
 
 global.window = {
     innerWidth: 1200,
@@ -90,10 +96,16 @@ describe("PitchDrumMatrix Widget", () => {
     let pdm;
 
     beforeEach(() => {
+        jest.useFakeTimers();
         pdm = new PitchDrumMatrix();
     });
 
     afterEach(() => {
+        if (pdm) {
+            pdm._clearPlaybackTimers();
+            pdm._clearWidgetTimers();
+        }
+        jest.useRealTimers();
         jest.clearAllMocks();
     });
 
@@ -216,6 +228,163 @@ describe("PitchDrumMatrix Widget", () => {
             expect(pdm._playing).toBe(true);
             pdm._playing = !pdm._playing;
             expect(pdm._playing).toBe(false);
+        });
+    });
+
+    describe("timer lifecycle", () => {
+        test("tracks and clears widget-owned timeouts", () => {
+            const callback = jest.fn();
+
+            pdm._setWidgetTimeout(callback, 500);
+
+            expect(pdm._timerManager.activeTimeoutCount).toBe(1);
+            expect(pdm._clearWidgetTimers()).toBe(1);
+
+            jest.advanceTimersByTime(500);
+
+            expect(callback).not.toHaveBeenCalled();
+            expect(pdm._timerManager.activeTimeoutCount).toBe(0);
+        });
+
+        test("tracks and clears playback-owned timeouts", () => {
+            const callback = jest.fn();
+
+            pdm._setPlaybackTimeout(callback, 500);
+
+            expect(pdm._playbackTimerManager.activeTimeoutCount).toBe(1);
+            expect(pdm._clearPlaybackTimers()).toBe(1);
+
+            jest.advanceTimersByTime(500);
+
+            expect(callback).not.toHaveBeenCalled();
+            expect(pdm._playbackTimerManager.activeTimeoutCount).toBe(0);
+        });
+
+        test("routes manual drum preview delay through widget timers", () => {
+            const trigger = jest.fn();
+            pdm.activity = {
+                errorMsg: jest.fn(),
+                logo: {
+                    synth: {
+                        trigger
+                    }
+                },
+                turtles: {
+                    ithTurtle: jest.fn(() => ({
+                        singer: {
+                            keySignature: "C"
+                        }
+                    }))
+                }
+            };
+
+            global.docById.mockImplementation(id => {
+                if (id === "pdmTable") {
+                    return {
+                        rows: [
+                            {
+                                cells: [
+                                    {
+                                        innerHTML: "C",
+                                        style: {}
+                                    }
+                                ]
+                            }
+                        ]
+                    };
+                }
+
+                if (id === "pdmDrumTable") {
+                    return {
+                        rows: [
+                            {
+                                cells: [
+                                    {
+                                        querySelector: jest.fn(() => ({ title: "kick drum" }))
+                                    }
+                                ]
+                            }
+                        ]
+                    };
+                }
+
+                return {};
+            });
+
+            pdm._setPairCell(0, 0, {}, true);
+
+            expect(trigger).toHaveBeenCalledTimes(1);
+            expect(pdm._timerManager.activeTimeoutCount).toBe(1);
+            expect(pdm._playbackTimerManager.activeTimeoutCount).toBe(0);
+
+            pdm._clearWidgetTimers();
+            jest.advanceTimersByTime(Singer.defaultBPMFactor * 1000 * 0.25);
+
+            expect(trigger).toHaveBeenCalledTimes(1);
+        });
+
+        test("routes playback drum preview delay through playback timers", () => {
+            const trigger = jest.fn();
+            pdm._playing = true;
+            pdm.activity = {
+                errorMsg: jest.fn(),
+                logo: {
+                    synth: {
+                        trigger
+                    }
+                },
+                turtles: {
+                    ithTurtle: jest.fn(() => ({
+                        singer: {
+                            keySignature: "C"
+                        }
+                    }))
+                }
+            };
+
+            global.docById.mockImplementation(id => {
+                if (id === "pdmTable") {
+                    return {
+                        rows: [
+                            {
+                                cells: [
+                                    {
+                                        innerHTML: "C",
+                                        style: {}
+                                    }
+                                ]
+                            }
+                        ]
+                    };
+                }
+
+                if (id === "pdmDrumTable") {
+                    return {
+                        rows: [
+                            {
+                                cells: [
+                                    {
+                                        querySelector: jest.fn(() => ({ title: "kick drum" }))
+                                    }
+                                ]
+                            }
+                        ]
+                    };
+                }
+
+                return {};
+            });
+
+            pdm._setPairCell(0, 0, {}, true);
+
+            expect(trigger).toHaveBeenCalledTimes(1);
+            expect(pdm._timerManager.activeTimeoutCount).toBe(0);
+            expect(pdm._playbackTimerManager.activeTimeoutCount).toBe(1);
+
+            pdm._clearPlaybackTimers();
+            jest.advanceTimersByTime(Singer.defaultBPMFactor * 1000 * 0.25);
+
+            expect(trigger).toHaveBeenCalledTimes(1);
         });
     });
 
